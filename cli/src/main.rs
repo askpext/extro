@@ -9,7 +9,11 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 #[derive(Parser)]
-#[command(name = "extro", about = "Rust-first browser extension framework CLI", version)]
+#[command(
+    name = "extro",
+    about = "Rust-first browser extension framework CLI",
+    version
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -94,10 +98,13 @@ fn main() -> Result<()> {
 }
 
 fn scaffold(name: &str, template: &str) -> Result<()> {
-    println!("Creating new Extro extension '{}' with '{}' template...", name, template);
-    
+    println!(
+        "Creating new Extro extension '{}' with '{}' template...",
+        name, template
+    );
+
     let root = PathBuf::from(name);
-    
+
     // Create directory structure
     fs::create_dir_all(root.join("extension/src/background"))
         .with_context(|| format!("failed to create {}", root.display()))?;
@@ -108,7 +115,7 @@ fn scaffold(name: &str, template: &str) -> Result<()> {
     fs::create_dir_all(root.join("crates/wasm/src"))?;
     fs::create_dir_all(root.join("crates/agent/src"))?;
     fs::create_dir_all(root.join(".extro/workflows"))?;
-    
+
     // Create workspace Cargo.toml
     fs::write(
         root.join("Cargo.toml"),
@@ -131,7 +138,7 @@ wasm-bindgen = "=0.2.114"
 serde-wasm-bindgen = "0.6"
 "#,
     )?;
-    
+
     // Create extension manifest
     fs::write(
         root.join("extension/manifest.json"),
@@ -159,11 +166,12 @@ serde-wasm-bindgen = "0.6"
 }
 "#,
     )?;
-    
+
     // Create README
     fs::write(
         root.join("README.md"),
-        format!(r#"# {name}
+        format!(
+            r#"# {name}
 
 Built with [Extro](https://github.com/askpext/extro) - Rust-first browser extension framework.
 
@@ -212,9 +220,10 @@ extro test
 ## License
 
 MIT
-"#),
+"#
+        ),
     )?;
-    
+
     // Create .gitignore
     fs::write(
         root.join(".gitignore"),
@@ -225,7 +234,7 @@ MIT
 *.log
 "#,
     )?;
-    
+
     // Create package.json
     fs::write(
         root.join("extension/package.json"),
@@ -256,7 +265,8 @@ MIT
 
     fs::write(
         root.join("ai.md"),
-        format!(r#"# AI Agent Guide for {name}
+        format!(
+            r#"# AI Agent Guide for {name}
 
 Welcome, Agent. This project follows the **Extro Pattern**:
 
@@ -269,7 +279,8 @@ Welcome, Agent. This project follows the **Extro Pattern**:
 - `extro assistant status`: Get project health.
 - `extro assistant suggest`: Get next recommended steps.
 - `extro build`: Compile WASM and package extension.
-"#),
+"#
+        ),
     )?;
 
     // Create Core Crate
@@ -448,7 +459,7 @@ impl TraceableEngine {
     println!("  cd {}", name);
     println!("  pnpm install");
     println!("  extro dev-inject chrome");
-    
+
     Ok(())
 }
 
@@ -475,12 +486,28 @@ fn build_workspace(dev: bool) -> Result<()> {
     let dist_dir = root.join("dist");
     let pkg_dir = dist_dir.join("pkg");
     let build_type = if dev { "debug" } else { "release" };
-    let wasm_artifact = root.join(format!("target/wasm32-unknown-unknown/{}/extro_wasm.wasm", build_type));
+    let wasm_artifact = root.join(format!(
+        "target/wasm32-unknown-unknown/{}/extro_wasm.wasm",
+        build_type
+    ));
 
     let build_args = if dev {
-        vec!["build", "-p", "extro-wasm", "--target", "wasm32-unknown-unknown"]
+        vec![
+            "build",
+            "-p",
+            "extro-wasm",
+            "--target",
+            "wasm32-unknown-unknown",
+        ]
     } else {
-        vec!["build", "-p", "extro-wasm", "--target", "wasm32-unknown-unknown", "--release"]
+        vec![
+            "build",
+            "-p",
+            "extro-wasm",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--release",
+        ]
     };
 
     run(
@@ -508,17 +535,29 @@ fn build_workspace(dev: bool) -> Result<()> {
         "wasm-bindgen packaging",
     )?;
 
-    copy_dir_all(&root.join("extension"), &dist_dir, &["package.json", "scripts"])?;
+    copy_dir_all(
+        &root.join("extension"),
+        &dist_dir,
+        &["package.json", "scripts"],
+    )?;
     write_popup_style(&dist_dir.join("src/popup/styles.css"))?;
 
     let build_mode = if dev { "development" } else { "production" };
-    println!("✓ built unpacked extension at {} ({})", display_rel(&dist_dir), build_mode);
+    println!(
+        "✓ built unpacked extension at {} ({})",
+        display_rel(&dist_dir),
+        build_mode
+    );
     Ok(())
 }
 
 fn watch_workspace() -> Result<()> {
     let root = workspace_root()?;
-    let watch_roots = [root.join("crates"), root.join("cli"), root.join("extension")];
+    let watch_roots = [
+        root.join("crates"),
+        root.join("cli"),
+        root.join("extension"),
+    ];
     let mut last = newest_mtime(&watch_roots)?;
 
     build_workspace(false)?;
@@ -563,9 +602,9 @@ fn dev_inject(browser: &str) -> Result<()> {
 
 fn run_tests(package: &str) -> Result<()> {
     let root = workspace_root()?;
-    
+
     println!("Running Extro tests...\n");
-    
+
     match package {
         "core" => {
             println!("Testing extro-core...\n");
@@ -600,21 +639,21 @@ fn run_tests(package: &str) -> Result<()> {
             )?;
         }
     }
-    
+
     println!("\n✓ All tests passed!");
     Ok(())
 }
 
 fn clean_workspace() -> Result<()> {
     let root = workspace_root()?;
-    
+
     let dirs_to_clean = [
         root.join("target"),
         root.join("dist"),
         root.join(".extro"),
         root.join("pkg"),
     ];
-    
+
     for dir in &dirs_to_clean {
         if dir.exists() {
             fs::remove_dir_all(dir)
@@ -622,7 +661,7 @@ fn clean_workspace() -> Result<()> {
             println!("✓ cleaned {}", display_rel(dir));
         }
     }
-    
+
     println!("\nWorkspace cleaned!");
     Ok(())
 }
@@ -630,16 +669,16 @@ fn clean_workspace() -> Result<()> {
 fn package_extension(format: &str) -> Result<()> {
     let root = workspace_root()?;
     let dist_dir = root.join("dist");
-    
+
     if !dist_dir.exists() {
         println!("Building extension first...");
         build_workspace(false)?;
     }
-    
+
     match format {
         "zip" => {
             let zip_path = root.join("extro-extension.zip");
-            
+
             #[cfg(windows)]
             {
                 ProcessCommand::new("powershell")
@@ -653,7 +692,7 @@ fn package_extension(format: &str) -> Result<()> {
                     .status()
                     .context("failed to create zip archive")?;
             }
-            
+
             #[cfg(unix)]
             {
                 ProcessCommand::new("zip")
@@ -664,7 +703,7 @@ fn package_extension(format: &str) -> Result<()> {
                     .status()
                     .context("failed to create zip archive")?;
             }
-            
+
             println!("✓ packaged extension to {}", display_rel(&zip_path));
         }
         "crx" => {
@@ -674,19 +713,19 @@ fn package_extension(format: &str) -> Result<()> {
             bail!("Unknown package format: {}. Use 'zip' or 'crx'.", format);
         }
     }
-    
+
     Ok(())
 }
 
 fn show_info() -> Result<()> {
     let root = workspace_root().ok();
-    
+
     println!("╔════════════════════════════════════════╗");
     println!("║         Extro Framework Info          ║");
     println!("╚════════════════════════════════════════╝\n");
-    
+
     println!("Version: {}", env!("CARGO_PKG_VERSION"));
-    
+
     // Get Rust version from rustc
     let rust_version = std::process::Command::new("rustc")
         .arg("--version")
@@ -695,10 +734,10 @@ fn show_info() -> Result<()> {
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .unwrap_or_else(|| "unknown".to_string());
     println!("Rust: {}", rust_version.trim());
-    
+
     if let Some(root) = &root {
         println!("\nWorkspace: {}", display_rel(root));
-        
+
         let dist_dir = root.join("dist");
         if dist_dir.exists() {
             println!("✓ Build output exists");
@@ -708,7 +747,7 @@ fn show_info() -> Result<()> {
     } else {
         println!("\n⚠ Not in an Extro workspace");
     }
-    
+
     println!("\nCommands:");
     println!("  extro new <name>     Create new extension");
     println!("  extro build          Build extension");
@@ -718,7 +757,7 @@ fn show_info() -> Result<()> {
     println!("  extro clean          Clean build artifacts");
     println!("  extro package        Package for distribution");
     println!("  extro info           Show this info");
-    
+
     Ok(())
 }
 
@@ -865,7 +904,7 @@ pre {
 }
 fn assistant_status(format: &str) -> Result<()> {
     let root = workspace_root().ok();
-    
+
     if format == "json" {
         let status = serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
@@ -881,7 +920,7 @@ fn assistant_status(format: &str) -> Result<()> {
                 "extro assistant suggest"
             ]
         });
-        
+
         println!("{}", serde_json::to_string_pretty(&status)?);
     } else {
         println!("Extro Assistant is ready to help.");
@@ -889,24 +928,24 @@ fn assistant_status(format: &str) -> Result<()> {
             println!("You are in an Extro workspace at {}.", display_rel(&r));
         }
     }
-    
+
     Ok(())
 }
 
 fn assistant_suggest() -> Result<()> {
     let root = workspace_root()?;
-    
+
     println!("Suggestions for the Agent:");
-    
+
     if !root.join("dist").exists() {
         println!("1. Run 'extro build' to generate the initial WASM package.");
     }
-    
+
     if root.join("crates/core/src/lib.rs").exists() {
         println!("2. Add a new 'BrowserEffect' in 'crates/core/src/lib.rs' to extend bridge capabilities.");
     }
-    
+
     println!("3. Run 'extro test' to verify the current state logic.");
-    
+
     Ok(())
 }

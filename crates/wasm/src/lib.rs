@@ -48,12 +48,18 @@ mod tests {
 
     #[test]
     fn test_classify_url_github() {
-        assert_eq!(classify_url("https://github.com/rust-lang/rust"), "developer");
+        assert_eq!(
+            classify_url("https://github.com/rust-lang/rust"),
+            "developer"
+        );
     }
 
     #[test]
     fn test_classify_url_docs() {
-        assert_eq!(classify_url("https://docs.example.com/guide"), "documentation");
+        assert_eq!(
+            classify_url("https://docs.example.com/guide"),
+            "documentation"
+        );
     }
 
     #[test]
@@ -64,4 +70,3 @@ mod tests {
     // Note: WASM engine tests require wasm-bindgen-test runner
     // Run with: wasm-pack test --headless --firefox
 }
-

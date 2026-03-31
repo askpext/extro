@@ -1,6 +1,6 @@
+use chrono::{DateTime, Utc};
 use extro_core::{CoreCommand, CoreResult, CoreState};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionTrace {
@@ -39,7 +39,7 @@ impl TraceableEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use extro_core::{RuntimeSurface, CoreAction, BrowserSnapshot};
+    use extro_core::{BrowserSnapshot, CoreAction, RuntimeSurface};
 
     #[test]
     fn test_traceable_dispatch() {

@@ -69,10 +69,7 @@ impl CoreState {
 
         match command.action {
             CoreAction::AnalyzeSelection => CoreResult {
-                message: format!(
-                    "Selection analysis prepared for {}",
-                    command.snapshot.title
-                ),
+                message: format!("Selection analysis prepared for {}", command.snapshot.title),
                 effects: vec![
                     BrowserEffect::ReadDomSelection,
                     BrowserEffect::ShowPopupToast {
@@ -139,7 +136,10 @@ mod tests {
         assert!(result.message.contains("Selection analysis"));
         assert_eq!(result.effects.len(), 2);
         assert!(matches!(result.effects[0], BrowserEffect::ReadDomSelection));
-        assert!(matches!(result.effects[1], BrowserEffect::ShowPopupToast { .. }));
+        assert!(matches!(
+            result.effects[1],
+            BrowserEffect::ShowPopupToast { .. }
+        ));
     }
 
     #[test]
@@ -159,8 +159,14 @@ mod tests {
 
         assert!(result.message.contains("Summary job queued"));
         assert_eq!(result.effects.len(), 2);
-        assert!(matches!(result.effects[0], BrowserEffect::PersistSession { .. }));
-        assert!(matches!(result.effects[1], BrowserEffect::OpenSidePanel { .. }));
+        assert!(matches!(
+            result.effects[0],
+            BrowserEffect::PersistSession { .. }
+        ));
+        assert!(matches!(
+            result.effects[1],
+            BrowserEffect::OpenSidePanel { .. }
+        ));
     }
 
     #[test]

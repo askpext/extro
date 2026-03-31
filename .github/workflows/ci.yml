@@ -63,7 +63,8 @@ jobs:
         run: cargo build -p extro-wasm --target wasm32-unknown-unknown --release
 
       - name: Package WASM
-        run: wasm-pack build --target web --out-dir pkg
+        run: wasm-pack build --target web --out-dir ../../pkg
+        working-directory: crates/wasm
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
