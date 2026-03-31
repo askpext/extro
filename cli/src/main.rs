@@ -628,7 +628,7 @@ fn run_tests(package: &str) -> Result<()> {
                 "cargo test for extro-wasm",
             )?;
         }
-        "all" | _ => {
+        _ => {
             println!("Testing all packages...\n");
             run(
                 ProcessCommand::new("cargo")

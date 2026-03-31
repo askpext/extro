@@ -1,0 +1,26 @@
+﻿cargo :     Checking extro-cli v0.2.0 
+(C:\Users\Aditya\Downloads\ex8nsn\cli)
+At line:1 char:1
++ cargo clippy -p extro-cli --all-targets -- -D warnings > clippy_repor ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking ex...ads\ex8nsn\ 
+   cli):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error: wildcard pattern covers any other pattern as it will match anyway
+   --> cli\src\main.rs:631:9
+    |
+631 |         "all" | _ => {
+    |         ^^^^^^^^^
+    |
+    = help: consider handling `_` separately
+    = help: for further information visit https://rust-lang.github.io/rust-
+clippy/rust-1.92.0/index.html#wildcard_in_or_patterns
+    = note: `-D clippy::wildcard-in-or-patterns` implied by `-D warnings`
+    = help: to override `-D warnings` add 
+`#[allow(clippy::wildcard_in_or_patterns)]`
+
+error: could not compile `extro-cli` (bin "extro" test) due to 1 previous 
+error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `extro-cli` (bin "extro") due to 1 previous error

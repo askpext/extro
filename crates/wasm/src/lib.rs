@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 
 #[wasm_bindgen]
+#[derive(Default)]
 pub struct WasmEngine {
     inner: CoreState,
 }
@@ -11,9 +12,7 @@ pub struct WasmEngine {
 impl WasmEngine {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self {
-            inner: CoreState::new(),
-        }
+        Self::default()
     }
 
     #[wasm_bindgen(js_name = dispatch)]

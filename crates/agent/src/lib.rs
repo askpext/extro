@@ -9,6 +9,7 @@ pub struct ExecutionTrace {
     pub reasoning: Option<String>,
 }
 
+#[derive(Default)]
 pub struct TraceableEngine {
     state: CoreState,
     traces: Vec<(CoreCommand, ExecutionTrace)>,
@@ -16,10 +17,7 @@ pub struct TraceableEngine {
 
 impl TraceableEngine {
     pub fn new() -> Self {
-        Self {
-            state: CoreState::new(),
-            traces: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn dispatch_with_trace(
