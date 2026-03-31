@@ -1,0 +1,9 @@
+{
+  "name": "extro-extension-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cargo run -p extro-cli -- watch",
+    "build": "cargo run -p extro-cli -- build"
+  }
+}

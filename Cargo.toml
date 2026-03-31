@@ -1,0 +1,23 @@
+[workspace]
+members = ["crates/core", "crates/wasm", "crates/agent", "cli"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.2.0"
+authors = ["Aditya Pandey <askadityapandey@gmail.com>"]
+description = "Rust-first browser extension framework for building production-grade extensions at insane speed."
+homepage = "https://extro.dev"
+repository = "https://github.com/askpext/extro"
+readme = "README.md"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+
