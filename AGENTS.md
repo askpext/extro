@@ -1,6 +1,6 @@
 # AGENTS.md — Extro Framework
 
-> This file is for AI coding agents (Claude Code, Gemini CLI, Cursor, Codex, etc.).
+> This file is for AI coding agents (Claude Code, Gemini CLI, Cursor, Codex, Qwen, etc.).
 > It tells you everything you need to build browser extensions with Extro.
 
 ## What is Extro?
@@ -19,7 +19,7 @@ cargo install extro-cli
 extro new my-extension
 cd my-extension
 
-# Install JS dependencies
+# ⚠️ CRITICAL: Install JS dependencies (includes @askpext/runtime)
 pnpm install
 
 # Build the extension (compiles Rust → WASM → extension bundle)
@@ -31,6 +31,8 @@ extro test
 # Launch Chrome with extension loaded
 extro dev-inject chrome
 ```
+
+> **CRITICAL**: You MUST run `pnpm install` before `extro build`. The scaffolded `package.json` depends on `@askpext/runtime` for the JS runtime adapter (WASM loader, structured logging). Skipping this will cause import errors.
 
 ## Architecture Rules
 
@@ -58,6 +60,8 @@ extro dev-inject chrome
 
 ```
 Cargo.toml                          # Rust workspace root
+package.json                        # npm deps (includes @askpext/runtime)
+AGENTS.md                           # This file — agent instructions
 crates/core/Cargo.toml              # Core crate config
 crates/core/src/lib.rs              # ⭐ Main domain logic (START HERE)
 crates/wasm/Cargo.toml              # WASM crate config
@@ -87,6 +91,13 @@ npm/runtime/src/logger.js           # Structured logging
 5. Trigger from JS: `chrome.runtime.sendMessage({ type: "extro.command", payload: { surface, action: "YourAction", snapshot } })`
 6. Run `extro test` then `extro build`
 
+### Adding a Browser Effect
+
+1. Add a variant to `BrowserEffect` enum in `crates/core/src/lib.rs`
+2. Return it from the appropriate action in `CoreState::dispatch()`
+3. Add a case in `extension/src/background/index.js` `applyEffect()`
+4. Run `extro test` then `extro build`
+
 ### Adding an AI Tool
 
 1. Create a `ToolDefinition` with name, description, and JSON schema
@@ -95,12 +106,54 @@ npm/runtime/src/logger.js           # Structured logging
 4. If valid, generate appropriate `BrowserEffect`s
 5. Log via `TraceableEngine::dispatch_with_trace()`
 
-### Adding a Browser Effect
+## Effect Executor Pattern
 
-1. Add a variant to `BrowserEffect` enum in `crates/core/src/lib.rs`
-2. Return it from the appropriate action in `CoreState::dispatch()`
-3. Add a case in `extension/src/background/index.js` `applyEffect()`
-4. Run `extro test` then `extro build`
+The background script receives effects from Rust and executes them. **This is the correct async pattern**:
+
+```js
+// In extension/src/background/index.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type !== "extro.command") return false;
+
+  (async () => {
+    try {
+      const result = await runCore(message.payload);
+      const effectResults = [];
+      for (const effect of (result.effects || [])) {
+        const effectResult = await applyEffect(effect);
+        effectResults.push(effectResult);
+      }
+      sendResponse({ ...result, effectResults });
+    } catch (err) {
+      sendResponse({ error: err.message });
+    }
+  })();
+
+  return true; // keep message channel open for async response
+});
+
+async function applyEffect(effect) {
+  if (effect.ShowPopupToast) {
+    return { toast: effect.ShowPopupToast.message };
+  }
+  if (effect.YourCustomEffect) {
+    const data = await chrome.someApi.someMethod();
+    return { data };
+  }
+  console.warn('[extro] unhandled effect:', effect);
+  return {};
+}
+```
+
+## Common Mistakes (AVOID)
+
+| ❌ Mistake | ✅ Correct |
+|-----------|-----------|
+| Calling `chrome.*` APIs from popup JS | Send `extro.command` → let background handle effects |
+| Skipping `pnpm install` before build | Always run `pnpm install` first (installs `@askpext/runtime`) |
+| Business logic in JavaScript | All logic in `crates/core/src/lib.rs` |
+| Forgetting `applyEffect()` handler | Every new `BrowserEffect` needs a case in `applyEffect()` |
+| Using `.then(sendResponse)` for async | Wrap in `(async () => { ... })()` + `return true` |
 
 ## Key Types (Rust)
 
@@ -164,3 +217,4 @@ extro test core     # Run only core crate tests
 extro test wasm     # Run only WASM crate tests
 cargo test -p extro-agent  # Run agent crate tests
 ```
+

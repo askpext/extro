@@ -241,20 +241,25 @@ MIT
 "#,
     )?;
 
-    // Create package.json
+    // Create root package.json with @askpext/runtime dependency
     fs::write(
-        root.join("extension/package.json"),
-        r#"{
-  "name": "extro-extension-runtime",
+        root.join("package.json"),
+        format!(
+            r#"{{
+  "name": "{name}",
   "private": true,
   "type": "module",
-  "scripts": {
+  "scripts": {{
     "dev": "extro watch",
     "build": "extro build",
     "test": "extro test"
-  }
-}
-"#,
+  }},
+  "dependencies": {{
+    "@askpext/runtime": "^0.2.0"
+  }}
+}}
+"#
+        ),
     )?;
 
     // Create Agentic Workflows
@@ -269,22 +274,116 @@ MIT
 "#,
     )?;
 
+    // Create AGENTS.md — the universal agent instruction file
     fs::write(
-        root.join("ai.md"),
+        root.join("AGENTS.md"),
         format!(
-            r#"# AI Agent Guide for {name}
+            r#"# AGENTS.md — {name}
 
-Welcome, Agent. This project follows the **Extro Pattern**:
+> This file is for AI coding agents (Claude Code, Gemini CLI, Cursor, Codex, Qwen, etc.).
+> It tells you everything you need to build this extension.
 
-- **Domain Logic**: Lives in `crates/core/src/lib.rs`.
-- **WASM Bridge**: Lives in `crates/wasm/src/lib.rs`.
-- **Side Effects**: Managed in `extension/src/background/index.js`.
-- **UI**: Fast React/Vanilla components in `extension/src/popup/`.
+## Quick Start
 
-## Key Commands for Agents
-- `extro assistant status`: Get project health.
-- `extro assistant suggest`: Get next recommended steps.
-- `extro build`: Compile WASM and package extension.
+```bash
+# 1. Install dependencies (REQUIRED — do not skip)
+pnpm install
+
+# 2. Build the extension (Rust → WASM → extension bundle)
+extro build
+
+# 3. Run tests
+extro test
+
+# 4. Launch Chrome with extension loaded
+extro dev-inject chrome
+```
+
+> **CRITICAL**: You MUST run `pnpm install` before `extro build`. The project depends on `@askpext/runtime` (npm).
+
+## Architecture Rules
+
+**Pattern**: `CoreCommand → CoreState::dispatch() → CoreResult + BrowserEffects`
+
+| Layer | Location | Responsibility |
+|-------|----------|----------------|
+| **Rust Core** | `crates/core/src/lib.rs` | ALL domain logic, state, validation |
+| **WASM Bridge** | `crates/wasm/src/lib.rs` | Thin wasm-bindgen wrapper around core |
+| **Background SW** | `extension/src/background/index.js` | Message routing + effect execution |
+| **Content Script** | `extension/src/content/index.js` | DOM reading + event capture |
+| **Popup UI** | `extension/src/popup/` | Thin render surface |
+| **WASM Loader** | `extension/src/shared/engine.js` | Initializes and caches WasmEngine |
+
+### Hard Rules
+
+1. **NEVER put business logic in JavaScript**. JS captures browser state and executes effects.
+2. **NEVER call browser APIs from Rust**. Rust receives snapshots and returns decisions.
+3. **ALL state transitions happen in `CoreState::dispatch()`**.
+4. **ALL side effects are expressed as `BrowserEffect` variants**.
+
+## Adding a New Feature
+
+1. Add a variant to `CoreAction` enum in `crates/core/src/lib.rs`
+2. Add a match arm in `CoreState::dispatch()` returning a `CoreResult` with effects
+3. Define any new `BrowserEffect` variants needed
+4. Handle effects in `extension/src/background/index.js` inside `applyEffect()`
+5. Trigger from JS: `chrome.runtime.sendMessage({{ type: "extro.command", payload: {{ surface, action: "YourAction", snapshot }} }})`
+6. Run `extro test` then `extro build`
+
+## Effect Executor Pattern
+
+The background script receives `CoreResult.effects` and executes them via `applyEffect()`.
+Here is the correct pattern for handling async Chrome API calls:
+
+```js
+async function applyEffect(effect) {{
+  if (effect.ShowPopupToast) {{
+    // Return data to the caller
+    return {{ toast: effect.ShowPopupToast.message }};
+  }}
+  if (effect.YourCustomEffect) {{
+    // Call Chrome APIs here, e.g.:
+    const data = await chrome.someApi.someMethod();
+    return {{ data }};
+  }}
+  return {{}};
+}}
+```
+
+## Common Mistakes (AVOID)
+
+- ❌ Calling `chrome.*` APIs directly from popup JS (violates architecture)
+- ❌ Skipping `pnpm install` before building
+- ❌ Putting sorting/filtering logic in JS instead of Rust core
+- ❌ Forgetting to handle new effects in `applyEffect()`
+
+## CLI Commands
+
+```
+extro build              Build for production (Rust → WASM → extension bundle)
+extro build --dev        Build with debug symbols
+extro watch              Watch mode with auto-rebuild
+extro dev-inject chrome  Launch browser with extension loaded
+extro test               Run Rust + WASM tests
+extro clean              Clean all build artifacts
+extro package            Package as .zip for Chrome Web Store
+extro info               Show environment info
+extro assistant status   Machine-readable project status (JSON)
+extro assistant suggest  Get next-step recommendations
+```
+
+## Message Protocol
+
+```js
+chrome.runtime.sendMessage({{
+  type: "extro.command",
+  payload: {{
+    surface: "Popup" | "ContentScript" | "Background" | "Sidebar",
+    action: "YourAction",
+    snapshot: {{ url: "...", title: "...", selected_text: "..." | null }}
+  }}
+}});
+```
 "#
         ),
     )?;
@@ -385,16 +484,56 @@ impl WasmEngine {
 "#,
     )?;
 
-    // Create Extension Runtime
+    // Create content script (required by manifest)
+    fs::write(
+        root.join("extension/src/content/index.js"),
+        r#"// Content script — captures DOM state and sends to background.
+// Add event listeners here to capture user interactions.
+// Example: selection changes, form submissions, page mutations.
+
+console.log('[extro] content script loaded on', location.href);
+"#,
+    )?;
+
+    // Create Extension Runtime — background with working effect executor
     fs::write(
         root.join("extension/src/background/index.js"),
         r#"import { runCore } from "../shared/engine.js";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type !== "extro.command") return false;
-  runCore(message.payload).then(sendResponse);
-  return true;
+
+  (async () => {
+    try {
+      const result = await runCore(message.payload);
+
+      // Execute all effects returned by the Rust core
+      const effectResults = [];
+      for (const effect of (result.effects || [])) {
+        const effectResult = await applyEffect(effect);
+        effectResults.push(effectResult);
+      }
+
+      sendResponse({ ...result, effectResults });
+    } catch (err) {
+      sendResponse({ error: err.message });
+    }
+  })();
+
+  return true; // keep message channel open for async response
 });
+
+/** Execute a BrowserEffect by calling the appropriate Chrome API.
+ *  Add new cases here when you add BrowserEffect variants in Rust. */
+async function applyEffect(effect) {
+  if (effect.ShowPopupToast) {
+    return { toast: effect.ShowPopupToast.message };
+  }
+  // Add your custom effect handlers here:
+  // if (effect.YourEffect) { ... }
+  console.warn('[extro] unhandled effect:', effect);
+  return {};
+}
 "#,
     )?;
 
@@ -461,10 +600,14 @@ impl TraceableEngine {
     )?;
 
     println!("✓ scaffolded {}", display_rel(&root));
-    println!("\nNext steps:");
-    println!("  cd {}", name);
-    println!("  pnpm install");
-    println!("  extro dev-inject chrome");
+    println!();
+    println!("Next steps:");
+    println!("  1. cd {}", name);
+    println!("  2. pnpm install          ← installs @askpext/runtime (REQUIRED)");
+    println!("  3. extro build           ← compiles Rust → WASM → extension bundle");
+    println!("  4. extro dev-inject chrome  ← launches Chrome with your extension");
+    println!();
+    println!("📄 Read AGENTS.md for architecture rules and workflows.");
 
     Ok(())
 }
