@@ -1,11 +1,13 @@
 import init, { WasmEngine, classifyUrl } from "../../pkg/extro_wasm.js";
+import { ExtroEngine } from "../../../npm/runtime/src/index.js";
 
 let engine;
 
 export async function getEngine() {
   if (engine) return engine;
-  await init();
-  engine = new WasmEngine();
+  const runner = new ExtroEngine({ WasmEngine });
+  await runner.init(init);
+  engine = runner.instance;
   return engine;
 }
 

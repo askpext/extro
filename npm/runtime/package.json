@@ -1,0 +1,29 @@
+{
+  "name": "@extro/runtime",
+  "version": "0.2.0",
+  "description": "The JavaScript runtime adapter for the Extro browser extension framework.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./logger": "./src/logger.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "extro",
+    "wasm",
+    "rust",
+    "browser-extension",
+    "agentic"
+  ],
+  "author": "Aditya Pandey <askadityapandey@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://extro.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/askpext/extro.git"
+  }
+}

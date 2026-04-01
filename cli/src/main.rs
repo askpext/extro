@@ -76,6 +76,11 @@ enum AssistantCommand {
     },
     /// Suggest next steps for the agent based on codebase analysis
     Suggest,
+    /// Explain an Extro concept for agent consumption
+    Explain {
+        /// Topic to explain (architecture, effects, commands, wasm-bridge, tool-registry)
+        topic: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -93,6 +98,7 @@ fn main() -> Result<()> {
         Command::Assistant { subcommand } => match subcommand {
             AssistantCommand::Status { format } => assistant_status(&format),
             AssistantCommand::Suggest => assistant_suggest(),
+            AssistantCommand::Explain { topic } => assistant_explain(&topic),
         },
     }
 }
@@ -733,30 +739,65 @@ fn show_info() -> Result<()> {
         .ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .unwrap_or_else(|| "unknown".to_string());
-    println!("Rust: {}", rust_version.trim());
+    println!("Rust:     {}", rust_version.trim());
+
+    // Check wasm-pack
+    let wasm_pack_version = std::process::Command::new("wasm-pack")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok());
+    match wasm_pack_version {
+        Some(v) => println!("wasm-pack: {}", v.trim()),
+        None => println!("wasm-pack: ✗ not installed (run: cargo install wasm-pack)"),
+    }
+
+    // Check wasm32 target
+    let wasm_target = std::process::Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .unwrap_or_default();
+    if wasm_target.contains("wasm32-unknown-unknown") {
+        println!("wasm32:   ✓ target installed");
+    } else {
+        println!("wasm32:   ✗ target missing (run: rustup target add wasm32-unknown-unknown)");
+    }
 
     if let Some(root) = &root {
         println!("\nWorkspace: {}", display_rel(root));
 
         let dist_dir = root.join("dist");
         if dist_dir.exists() {
-            println!("✓ Build output exists");
+            println!("  ✓ Build output exists");
         } else {
-            println!("✗ No build output (run 'extro build')");
+            println!("  ✗ No build output (run 'extro build')");
+        }
+
+        if root.join("extension/manifest.json").exists() {
+            println!("  ✓ Manifest V3 present");
+        }
+
+        if root.join("crates/core/src/lib.rs").exists() {
+            println!("  ✓ Core crate present");
         }
     } else {
         println!("\n⚠ Not in an Extro workspace");
     }
 
     println!("\nCommands:");
-    println!("  extro new <name>     Create new extension");
-    println!("  extro build          Build extension");
-    println!("  extro watch          Watch for changes");
-    println!("  extro dev-inject     Launch browser with extension");
-    println!("  extro test           Run tests");
-    println!("  extro clean          Clean build artifacts");
-    println!("  extro package        Package for distribution");
-    println!("  extro info           Show this info");
+    println!("  extro new <name>          Create new extension");
+    println!("  extro build               Build extension");
+    println!("  extro watch               Watch for changes");
+    println!("  extro dev-inject <browser> Launch browser with extension");
+    println!("  extro test [package]       Run tests");
+    println!("  extro clean               Clean build artifacts");
+    println!("  extro package             Package for distribution");
+    println!("  extro info                Show this info");
+    println!("  extro assistant status    Agent-friendly project status");
+    println!("  extro assistant suggest   Next steps for agents");
+    println!("  extro assistant explain   Explain an Extro concept");
 
     Ok(())
 }
@@ -764,13 +805,41 @@ fn show_info() -> Result<()> {
 fn resolve_browser(browser: &str) -> Result<PathBuf> {
     let candidates = match browser {
         "chrome" | "chromium" => vec![
+            // Windows
             PathBuf::from(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
             PathBuf::from(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
             PathBuf::from(r"C:\Program Files\Chromium\Application\chrome.exe"),
+            // macOS
+            PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            PathBuf::from("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+            // Linux
+            PathBuf::from("/usr/bin/google-chrome-stable"),
+            PathBuf::from("/usr/bin/google-chrome"),
+            PathBuf::from("/usr/bin/chromium-browser"),
+            PathBuf::from("/usr/bin/chromium"),
+            PathBuf::from("/snap/bin/chromium"),
         ],
         "edge" => vec![
+            // Windows
             PathBuf::from(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
             PathBuf::from(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+            // macOS
+            PathBuf::from("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+            // Linux
+            PathBuf::from("/usr/bin/microsoft-edge-stable"),
+            PathBuf::from("/usr/bin/microsoft-edge"),
+        ],
+        "brave" => vec![
+            // Windows
+            PathBuf::from(r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"),
+            PathBuf::from(
+                r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+            ),
+            // macOS
+            PathBuf::from("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+            // Linux
+            PathBuf::from("/usr/bin/brave-browser"),
+            PathBuf::from("/usr/bin/brave"),
         ],
         other => vec![PathBuf::from(other)],
     };
@@ -778,7 +847,7 @@ fn resolve_browser(browser: &str) -> Result<PathBuf> {
     candidates
         .into_iter()
         .find(|path| path.exists())
-        .with_context(|| format!("could not find a browser executable for {}", browser))
+        .with_context(|| format!("could not find a browser executable for '{}'. Supported: chrome, chromium, edge, brave, or pass a direct path.", browser))
 }
 
 fn newest_mtime(paths: &[PathBuf]) -> Result<SystemTime> {
@@ -910,15 +979,38 @@ fn assistant_status(format: &str) -> Result<()> {
             "version": env!("CARGO_PKG_VERSION"),
             "in_workspace": root.is_some(),
             "workspace_path": root.as_ref().map(|r| display_rel(r)),
-            "crates": ["core", "wasm"],
+            "crates": ["core", "wasm", "agent"],
+            "architecture": "reducer",
+            "pattern": "CoreCommand -> CoreState::dispatch() -> CoreResult + BrowserEffects",
             "has_dist": root.as_ref().map(|r| r.join("dist").exists()).unwrap_or(false),
             "manifest_v3": root.as_ref().map(|r| r.join("extension/manifest.json").exists()).unwrap_or(false),
+            "has_tool_registry": true,
             "agent_ready": true,
-            "next_steps": [
+            "key_files": {
+                "domain_logic": "crates/core/src/lib.rs",
+                "wasm_bridge": "crates/wasm/src/lib.rs",
+                "agent_tracing": "crates/agent/src/lib.rs",
+                "background_worker": "extension/src/background/index.js",
+                "content_script": "extension/src/content/index.js",
+                "popup_ui": "extension/src/popup/index.js",
+                "wasm_loader": "extension/src/shared/engine.js",
+                "manifest": "extension/manifest.json"
+            },
+            "available_commands": [
                 "extro build",
+                "extro build --dev",
+                "extro watch",
                 "extro test",
-                "extro assistant suggest"
-            ]
+                "extro test core",
+                "extro dev-inject chrome",
+                "extro package",
+                "extro clean",
+                "extro info",
+                "extro assistant status",
+                "extro assistant suggest",
+                "extro assistant explain <topic>"
+            ],
+            "explain_topics": ["architecture", "effects", "commands", "wasm-bridge", "tool-registry"]
         });
 
         println!("{}", serde_json::to_string_pretty(&status)?);
@@ -934,18 +1026,167 @@ fn assistant_status(format: &str) -> Result<()> {
 
 fn assistant_suggest() -> Result<()> {
     let root = workspace_root()?;
+    let mut step = 1;
 
-    println!("Suggestions for the Agent:");
+    println!("Suggestions for the Agent:\n");
 
     if !root.join("dist").exists() {
-        println!("1. Run 'extro build' to generate the initial WASM package.");
+        println!(
+            "{}. Run 'extro build' to generate the initial WASM package and unpacked extension.",
+            step
+        );
+        step += 1;
     }
 
     if root.join("crates/core/src/lib.rs").exists() {
-        println!("2. Add a new 'BrowserEffect' in 'crates/core/src/lib.rs' to extend bridge capabilities.");
+        println!("{}. Add a new variant to 'CoreAction' enum in 'crates/core/src/lib.rs' for your extension's primary action.", step);
+        step += 1;
+        println!("{}. Add a matching 'BrowserEffect' variant in the same file for the side effect your action produces.", step);
+        step += 1;
+        println!("{}. Handle the new effect in 'extension/src/background/index.js' inside the 'applyEffect()' function.", step);
+        step += 1;
     }
 
-    println!("3. Run 'extro test' to verify the current state logic.");
+    if !root.join("crates/core/src/lib.rs").exists() {
+        println!(
+            "{}. Create the Rust core crate at 'crates/core/src/lib.rs' with your domain types.",
+            step
+        );
+        step += 1;
+    }
+
+    println!(
+        "{}. Run 'extro test' to verify all state transitions and tool validations.",
+        step
+    );
+    step += 1;
+    println!(
+        "{}. Run 'extro build' and 'extro dev-inject chrome' to test in a real browser.",
+        step
+    );
+    step += 1;
+    println!(
+        "{}. Run 'extro assistant explain <topic>' for deeper context on any concept.",
+        step
+    );
+
+    println!(
+        "\nWorkflow files in '.extro/workflows/' provide step-by-step recipes for common tasks."
+    );
+
+    Ok(())
+}
+
+fn assistant_explain(topic: &str) -> Result<()> {
+    match topic {
+        "architecture" => {
+            println!("# Extro Architecture\n");
+            println!("Extro follows a **reducer pattern** where Rust owns all domain logic and JavaScript is a thin adapter.\n");
+            println!("## Data Flow");
+            println!("1. User interacts with popup or selects text on a page");
+            println!("2. Content script or popup captures browser state as a BrowserSnapshot");
+            println!(
+                "3. Snapshot is sent to background service worker via chrome.runtime.sendMessage"
+            );
+            println!("4. Background passes payload to WasmEngine.dispatch()");
+            println!("5. Rust validates command, updates CoreState, returns CoreResult {{ message, effects }}");
+            println!("6. Background executes each BrowserEffect through browser APIs");
+            println!("7. Result is sent back to the originating surface for rendering\n");
+            println!("## Key Rule");
+            println!(
+                "JavaScript NEVER contains business logic. It captures facts and executes effects."
+            );
+            println!(
+                "Rust NEVER touches browser APIs. It receives snapshots and returns decisions.\n"
+            );
+            println!("## File Locations");
+            println!("- Domain logic: crates/core/src/lib.rs");
+            println!("- WASM bridge: crates/wasm/src/lib.rs");
+            println!("- Agent tracing: crates/agent/src/lib.rs");
+            println!("- Background worker: extension/src/background/index.js");
+            println!("- Content script: extension/src/content/index.js");
+            println!("- Popup UI: extension/src/popup/");
+        }
+        "effects" => {
+            println!("# Browser Effects\n");
+            println!("BrowserEffect is an enum in crates/core/src/lib.rs that defines all side effects the Rust core can request.\n");
+            println!("## Current Effects");
+            println!("- ReadDomSelection: Read the current text selection from the active tab");
+            println!("- ReadClipboard: Read clipboard contents via the Clipboard API");
+            println!(
+                "- PersistSession {{ key, value }}: Store a key-value pair in session storage"
+            );
+            println!("- ShowPopupToast {{ message }}: Show a toast notification in the popup");
+            println!("- OpenSidePanel {{ route }}: Open the side panel to a specific route");
+            println!(
+                "- InjectContentScript {{ file }}: Inject a content script into the active tab\n"
+            );
+            println!("## Adding a New Effect");
+            println!("1. Add a variant to BrowserEffect enum in crates/core/src/lib.rs");
+            println!("2. Return it from CoreState::dispatch() in the appropriate action handler");
+            println!("3. Handle it in extension/src/background/index.js inside applyEffect()");
+            println!("4. Run 'extro test' then 'extro build'");
+        }
+        "commands" => {
+            println!("# Core Commands\n");
+            println!("Commands are the input to the Rust state machine. Every user action becomes a CoreCommand.\n");
+            println!("## Structure");
+            println!("CoreCommand {{");
+            println!("  surface: RuntimeSurface,  // Where the command originated (Popup, ContentScript, Background, Sidebar)");
+            println!("  action: CoreAction,       // What to do (AnalyzeSelection, SummarizePage, SyncState)");
+            println!(
+                "  snapshot: BrowserSnapshot, // Current browser state (url, title, selected_text)"
+            );
+            println!("}}\n");
+            println!("## Adding a New Action");
+            println!("1. Add a variant to CoreAction enum in crates/core/src/lib.rs");
+            println!("2. Add a match arm in CoreState::dispatch() that returns a CoreResult");
+            println!("3. Send the action from JavaScript: chrome.runtime.sendMessage({{ type: 'extro.command', payload: {{ surface, action: 'YourAction', snapshot }} }})");
+            println!("4. Run 'extro test' then 'extro build'");
+        }
+        "wasm-bridge" => {
+            println!("# WASM Bridge\n");
+            println!("The WASM bridge (crates/wasm/src/lib.rs) wraps CoreState with wasm-bindgen so JavaScript can call it.\n");
+            println!("## How It Works");
+            println!("- WasmEngine struct wraps CoreState");
+            println!("- WasmEngine::dispatch(JsValue) deserializes input using serde-wasm-bindgen");
+            println!("- Calls CoreState::dispatch() and serializes the CoreResult back to JsValue");
+            println!("- JavaScript gets a plain object {{ message, effects }}\n");
+            println!("## Build Pipeline");
+            println!("1. cargo build -p extro-wasm --target wasm32-unknown-unknown");
+            println!("2. wasm-bindgen packages the .wasm file with JS glue code");
+            println!("3. Output goes to dist/pkg/ for the extension to import\n");
+            println!("## Adding Exports");
+            println!("To expose a new Rust function to JavaScript:");
+            println!("1. Add a #[wasm_bindgen] function or method in crates/wasm/src/lib.rs");
+            println!("2. Import it in extension/src/shared/engine.js");
+            println!("3. Run 'extro build'");
+        }
+        "tool-registry" => {
+            println!("# AI Tool Registry\n");
+            println!("The ToolRegistry (crates/core/src/lib.rs) enforces the 'model proposes, Rust decides' pattern.\n");
+            println!("## How It Works");
+            println!("1. Register allowed tools with ToolRegistry::register(ToolDefinition)");
+            println!("2. AI model proposes a tool call as AIToolCall {{ tool_name, arguments }}");
+            println!("3. Rust validates via ToolRegistry::validate(&call)");
+            println!("4. Only validated calls proceed to effect generation\n");
+            println!("## Key Types");
+            println!("- ToolDefinition: {{ name, description, parameters_schema }}");
+            println!("- AIToolCall: {{ tool_name, arguments }}");
+            println!("- ToolRegistry: HashMap-backed registry with validate(), list_tools(), has_tool()\n");
+            println!("## Security Guarantee");
+            println!("AI cannot call arbitrary browser APIs. All tool calls are:");
+            println!("  - Validated against a whitelist");
+            println!("  - Schema-checked for argument correctness");
+            println!("  - Logged for audit trails (via extro-agent crate)");
+        }
+        unknown => {
+            println!("Unknown topic: '{}'", unknown);
+            println!(
+                "Available topics: architecture, effects, commands, wasm-bridge, tool-registry"
+            );
+        }
+    }
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 import { classifyUrl } from "../shared/engine.js";
-import { logger } from "../shared/logger.js";
+import { logger } from "../../../npm/runtime/src/logger.js";
 
 document.addEventListener("mouseup", async () => {
   const selection = window.getSelection()?.toString().trim();

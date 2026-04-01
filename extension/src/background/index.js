@@ -1,5 +1,5 @@
 import { runCore } from "../shared/engine.js";
-import { logger } from "../shared/logger.js";
+import { logger } from "../../../npm/runtime/src/logger.js";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type !== "extro.command") return false;

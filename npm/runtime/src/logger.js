@@ -41,7 +41,7 @@ export const logger = {
    * Log debug message (only in development)
    */
   debug(message, data) {
-    if (process.env?.NODE_ENV === 'development' || globalThis.EXTRO_DEBUG) {
+    if (globalThis.EXTRO_DEBUG) {
       this._log('debug', message, data);
     }
   },
