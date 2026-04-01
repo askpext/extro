@@ -356,6 +356,37 @@ async function applyEffect(effect) {{
 - ❌ Skipping `pnpm install` before building
 - ❌ Putting sorting/filtering logic in JS instead of Rust core
 - ❌ Forgetting to handle new effects in `applyEffect()`
+- ❌ Fetching browser data inside Rust — gather it in JS, pass via `snapshot.context`
+
+## Data Flow: Enrich Before Dispatch
+
+When your extension needs data FROM the browser (tabs, bookmarks, storage, etc.):
+
+1. **JS gathers the data** using Chrome APIs in `enrichPayload()`
+2. **JS attaches it** to `snapshot.context` as JSON
+3. **Rust receives it** in `command.snapshot.context` and parses what it needs
+4. **Rust returns effects** — JS executes them
+
+```js
+// Example: tab manager gathers tabs before dispatching
+async function enrichPayload(payload) {{
+  if (payload.action === 'ListTabs') {{
+    const tabs = await chrome.tabs.query({{}});
+    payload.snapshot.context = {{ tabs }};
+  }}
+  return payload;
+}}
+```
+
+```rust
+// Rust processes the tabs from context
+CoreAction::ListTabs => {{
+    let tabs: Vec<TabInfo> = serde_json::from_value(
+        command.snapshot.context["tabs"].clone()
+    ).unwrap_or_default();
+    // sort, filter, search — all in Rust
+}}
+```
 
 ## CLI Commands
 
@@ -400,6 +431,7 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+serde_json = { workspace = true }
 "#,
     )?;
 
@@ -410,8 +442,19 @@ thiserror = { workspace = true }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RuntimeSurface { Background, ContentScript, Popup, Sidebar }
 
+/// Snapshot of the current browser state.
+/// The `context` field carries any additional data from browser APIs
+/// (tabs, bookmarks, history, storage, etc.) so Rust can process it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BrowserSnapshot { pub url: String, pub title: String, pub selected_text: Option<String> }
+pub struct BrowserSnapshot {
+    pub url: String,
+    pub title: String,
+    pub selected_text: Option<String>,
+    /// Arbitrary browser data gathered by JS before dispatch.
+    /// Use this to pass tabs, bookmarks, history, DOM data, etc. to Rust.
+    #[serde(default)]
+    pub context: serde_json::Value,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoreAction { SyncState }
@@ -495,7 +538,7 @@ console.log('[extro] content script loaded on', location.href);
 "#,
     )?;
 
-    // Create Extension Runtime — background with working effect executor
+    // Create Extension Runtime — background with enrich-before-dispatch pattern
     fs::write(
         root.join("extension/src/background/index.js"),
         r#"import { runCore } from "../shared/engine.js";
@@ -505,9 +548,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   (async () => {
     try {
-      const result = await runCore(message.payload);
+      // Step 1: Enrich the snapshot with browser data BEFORE calling Rust.
+      // This ensures Rust has everything it needs to make decisions.
+      const payload = await enrichPayload(message.payload);
 
-      // Execute all effects returned by the Rust core
+      // Step 2: Pass the enriched payload to the WASM engine.
+      const result = await runCore(payload);
+
+      // Step 3: Execute all effects returned by Rust.
       const effectResults = [];
       for (const effect of (result.effects || [])) {
         const effectResult = await applyEffect(effect);
@@ -523,6 +571,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // keep message channel open for async response
 });
 
+/** Gather browser data and attach it to snapshot.context.
+ *  Customize this for your extension's needs. */
+async function enrichPayload(payload) {
+  // Example: gather active tab info for every command
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  payload.snapshot = payload.snapshot || {};
+  payload.snapshot.context = payload.snapshot.context || {};
+  payload.snapshot.url = activeTab?.url || payload.snapshot.url || '';
+  payload.snapshot.title = activeTab?.title || payload.snapshot.title || '';
+
+  // Add more data here based on the action:
+  // if (payload.action === 'ListTabs') {
+  //   const tabs = await chrome.tabs.query({});
+  //   payload.snapshot.context.tabs = tabs;
+  // }
+  // if (payload.action === 'GetBookmarks') {
+  //   const tree = await chrome.bookmarks.getTree();
+  //   payload.snapshot.context.bookmarks = tree;
+  // }
+
+  return payload;
+}
+
 /** Execute a BrowserEffect by calling the appropriate Chrome API.
  *  Add new cases here when you add BrowserEffect variants in Rust. */
 async function applyEffect(effect) {
@@ -530,7 +601,7 @@ async function applyEffect(effect) {
     return { toast: effect.ShowPopupToast.message };
   }
   // Add your custom effect handlers here:
-  // if (effect.YourEffect) { ... }
+  // if (effect.ActivateTab) { await chrome.tabs.update(effect.ActivateTab.tab_id, { active: true }); }
   console.warn('[extro] unhandled effect:', effect);
   return {};
 }

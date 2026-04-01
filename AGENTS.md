@@ -88,8 +88,9 @@ npm/runtime/src/logger.js           # Structured logging
 2. Add a match arm in `CoreState::dispatch()` returning a `CoreResult`
 3. Define any new `BrowserEffect` variants needed
 4. Handle effects in `extension/src/background/index.js` `applyEffect()`
-5. Trigger from JS: `chrome.runtime.sendMessage({ type: "extro.command", payload: { surface, action: "YourAction", snapshot } })`
-6. Run `extro test` then `extro build`
+5. If the action needs browser data, add gathering logic to `enrichPayload()` in background.js
+6. Trigger from JS: `chrome.runtime.sendMessage({ type: "extro.command", payload: { surface, action: "YourAction", snapshot } })`
+7. Run `extro test` then `extro build`
 
 ### Adding a Browser Effect
 
@@ -145,6 +146,39 @@ async function applyEffect(effect) {
 }
 ```
 
+## Enrich Before Dispatch (Data-In Pattern)
+
+When your extension needs data FROM the browser (tabs, bookmarks, history, storage, DOM, etc.), **gather it in JS and pass it to Rust via `snapshot.context`**:
+
+```js
+// In enrichPayload() — runs BEFORE every WASM call
+async function enrichPayload(payload) {
+  if (payload.action === 'ListTabs') {
+    payload.snapshot.context = {
+      tabs: await chrome.tabs.query({})
+    };
+  }
+  if (payload.action === 'GetBookmarks') {
+    payload.snapshot.context = {
+      bookmarks: await chrome.bookmarks.getTree()
+    };
+  }
+  return payload;
+}
+```
+
+```rust
+// In Rust — parse context data and apply logic
+CoreAction::ListTabs => {
+    let tabs: Vec<TabInfo> = serde_json::from_value(
+        command.snapshot.context["tabs"].clone()
+    ).unwrap_or_default();
+    // Sort, filter, search — all in Rust
+}
+```
+
+**This pattern ensures Rust owns ALL logic** while JS remains a thin data-gathering + effect-executing layer.
+
 ## Common Mistakes (AVOID)
 
 | ❌ Mistake | ✅ Correct |
@@ -154,10 +188,19 @@ async function applyEffect(effect) {
 | Business logic in JavaScript | All logic in `crates/core/src/lib.rs` |
 | Forgetting `applyEffect()` handler | Every new `BrowserEffect` needs a case in `applyEffect()` |
 | Using `.then(sendResponse)` for async | Wrap in `(async () => { ... })()` + `return true` |
+| Fetching browser data in Rust | Gather in JS, pass via `snapshot.context`, process in Rust |
 
 ## Key Types (Rust)
 
 ```rust
+// Browser state snapshot (sent from JS to Rust)
+struct BrowserSnapshot {
+    url: String,
+    title: String,
+    selected_text: Option<String>,
+    context: serde_json::Value,  // tabs, bookmarks, history, storage, etc.
+}
+
 // Input to the state machine
 struct CoreCommand { surface: RuntimeSurface, action: CoreAction, snapshot: BrowserSnapshot }
 

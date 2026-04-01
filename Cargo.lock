@@ -163,7 +163,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "extro-agent"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "extro-core",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "extro-cli"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "extro-core"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "extro-wasm"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "extro-core",
  "serde",

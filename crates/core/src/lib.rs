@@ -40,6 +40,24 @@ pub enum RuntimeSurface {
 ///
 /// Captured by JavaScript adapters and sent to the Rust core for processing.
 /// The core never reads browser state directly — it only receives these snapshots.
+///
+/// The `context` field carries arbitrary browser data (tabs, bookmarks, history,
+/// storage, DOM fragments, etc.) so that Rust can make decisions on any data
+/// without the architecture needing extension-specific plumbing.
+///
+/// # Example
+///
+/// ```json
+/// {
+///   "url": "https://example.com",
+///   "title": "Example",
+///   "selected_text": null,
+///   "context": {
+///     "tabs": [{"id": 1, "title": "Tab 1", "url": "..."}],
+///     "bookmarks": [{"id": "1", "title": "Saved", "url": "..."}]
+///   }
+/// }
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserSnapshot {
     /// The URL of the active tab.
@@ -48,6 +66,13 @@ pub struct BrowserSnapshot {
     pub title: String,
     /// Text selected by the user, if any.
     pub selected_text: Option<String>,
+    /// Arbitrary browser data gathered by JS before dispatch.
+    ///
+    /// JS adapters populate this with whatever the extension needs:
+    /// tabs, bookmarks, history, storage contents, DOM fragments, etc.
+    /// Rust parses the relevant fields in each action handler.
+    #[serde(default)]
+    pub context: serde_json::Value,
 }
 
 /// Actions that can be dispatched to the core state machine.
@@ -135,6 +160,7 @@ pub struct CoreResult {
 ///         url: "https://example.com".into(),
 ///         title: "Example".into(),
 ///         selected_text: None,
+///         context: serde_json::Value::Null,
 ///     },
 /// };
 /// let result = state.dispatch(command);
@@ -347,6 +373,7 @@ mod tests {
                 url: "https://example.com".to_string(),
                 title: "Test Page".to_string(),
                 selected_text: Some("Hello World".to_string()),
+                context: serde_json::Value::Null,
             },
         };
 
@@ -371,6 +398,7 @@ mod tests {
                 url: "https://docs.example.com".to_string(),
                 title: "Docs".to_string(),
                 selected_text: None,
+                context: serde_json::Value::Null,
             },
         };
 
@@ -398,6 +426,7 @@ mod tests {
                 url: "https://example.com".to_string(),
                 title: "Test".to_string(),
                 selected_text: None,
+                context: serde_json::Value::Null,
             },
         };
 
@@ -419,6 +448,7 @@ mod tests {
                     url: "https://example.com".to_string(),
                     title: "Test".to_string(),
                     selected_text: None,
+                    context: serde_json::Value::Null,
                 },
             };
             state.dispatch(command);
@@ -439,6 +469,7 @@ mod tests {
                     url: "https://example.com".to_string(),
                     title: "Test".to_string(),
                     selected_text: None,
+                    context: serde_json::Value::Null,
                 },
             };
             state.dispatch(command);
@@ -458,6 +489,7 @@ mod tests {
                 url: "https://example.com".to_string(),
                 title: "Test".to_string(),
                 selected_text: None,
+                context: serde_json::Value::Null,
             },
         };
         state.dispatch(command);
@@ -473,6 +505,7 @@ mod tests {
             url: "https://example.com".to_string(),
             title: "Test Page".to_string(),
             selected_text: Some("Selected text".to_string()),
+            context: serde_json::json!({"test_key": "test_value"}),
         };
 
         let serialized = serde_json::to_string(&snapshot).unwrap();
@@ -495,6 +528,7 @@ mod tests {
                     url: "https://example.com".into(),
                     title: "Test".into(),
                     selected_text: None,
+                    context: serde_json::Value::Null,
                 },
             });
         }

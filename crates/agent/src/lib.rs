@@ -45,6 +45,7 @@ pub struct ExecutionTrace {
 ///         url: "https://example.com".into(),
 ///         title: "Test".into(),
 ///         selected_text: None,
+///         context: serde_json::Value::Null,
 ///     },
 /// };
 /// let trace = ExecutionTrace {
@@ -119,6 +120,7 @@ mod tests {
                 url: "https://example.com".into(),
                 title: "Test".into(),
                 selected_text: None,
+                context: serde_json::Value::Null,
             },
         }
     }
