@@ -72,7 +72,7 @@ extension/src/content/index.js      # Content script (DOM adapter)
 extension/src/popup/index.html      # Popup HTML
 extension/src/popup/index.js        # Popup JS
 extension/src/shared/engine.js      # WASM loader + engine singleton
-npm/runtime/src/index.js            # @extro/runtime npm package
+npm/runtime/src/index.js            # @askpext/runtime npm package
 npm/runtime/src/logger.js           # Structured logging
 ```
 

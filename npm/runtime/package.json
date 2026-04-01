@@ -1,5 +1,5 @@
 {
-  "name": "@extro/runtime",
+  "name": "@askpext/runtime",
   "version": "0.2.0",
   "description": "The JavaScript runtime adapter for the Extro browser extension framework.",
   "type": "module",

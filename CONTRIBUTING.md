@@ -36,7 +36,7 @@ cargo fmt --all -- --check
 | `crates/agent/` | Rust | Agent tracing layer |
 | `cli/` | Rust | CLI (scaffold, build, watch, test, package) |
 | `extension/` | JS | Browser extension shell (MV3) |
-| `npm/runtime/` | JS/TS | Published npm package `@extro/runtime` |
+| `npm/runtime/` | JS/TS | Published npm package `@askpext/runtime` |
 
 ## Making Changes
 

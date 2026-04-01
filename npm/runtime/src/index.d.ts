@@ -1,5 +1,5 @@
 /**
- * @extro/runtime — TypeScript type definitions
+ * @askpext/runtime — TypeScript type definitions
  *
  * The JavaScript runtime adapter for the Extro browser extension framework.
  */
