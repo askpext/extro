@@ -9,6 +9,7 @@ version = "0.2.0"
 authors = ["Aditya Pandey <askadityapandey@gmail.com>"]
 description = "Rust-first browser extension framework for building production-grade extensions at insane speed."
 homepage = "https://extro.dev"
+documentation = "https://docs.extro.dev"
 repository = "https://github.com/askpext/extro"
 readme = "README.md"
 
